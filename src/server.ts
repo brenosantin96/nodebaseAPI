@@ -1,32 +1,46 @@
-import express, { Request, Response, ErrorRequestHandler } from 'express';
+import express, { Request, Response } from 'express';
 import path from 'path';
 import dotenv from 'dotenv';
 import cors from 'cors';
 import apiRoutes from './routes/api';
+import * as http from 'http'
+import socketIO, { Server, Socket } from 'socket.io';
+import { SocketData, ServerToClientEvents, ClientToServerEvents, InterServerEvents } from './socketInterface';
 
 dotenv.config();
 
-const server = express();
+const serverExpress = express();
+const server = http.createServer(serverExpress);
+const io = new Server<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData>(server);
 
-server.use(cors());
+//rota estática, cors, requests e responses, routes.
+serverExpress.use(cors());
+serverExpress.use(express.static(path.join(__dirname, '../public')));
+serverExpress.use(express.urlencoded({ extended: true }));
+serverExpress.use(apiRoutes);
 
-server.use(express.static(path.join(__dirname, '../public')));
-server.use(express.urlencoded({ extended: true }));
+//Usuarios
+let connectedUsers : Array<string> = [];
 
-server.get('/ping', (req: Request, res: Response) => res.json({ pong: true }));
+//EXecuta quando um cliente se conecta no servidor
+io.on('connection', (socket) => {
+    console.log('Um usuário se conectou');
 
-server.use(apiRoutes);
+    socket.on('joinRequest', (username)=> {
+        socket.data.username = username;
+        connectedUsers.push(username)
+        console.log(connectedUsers);
+    })
 
-server.use((req: Request, res: Response) => {
-    res.status(404);
-    res.json({ error: 'Endpoint não encontrado.' });
+    socket.on('disconnect', () => {
+        console.log('Um usuário saiu')
+    })
+
+
 });
 
-const errorHandler: ErrorRequestHandler = (err, req, res, next) => {
-    res.status(400); // Bad Request
-    console.log(err);
-    res.json({ error: 'Ocorreu algum erro.' });
-}
-server.use(errorHandler);
 
-server.listen(process.env.PORT);
+
+server.listen(process.env.PORT, () => {
+    console.log("Server iniciado.")
+});
